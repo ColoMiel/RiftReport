@@ -1,0 +1,622 @@
+{
+  "name": "RiftReport - LoL Stats Coach",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "riffreport",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a5431858-3128-48d3-afef-e461ee9d9a9b",
+      "name": "Webhook - /rr",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2736,
+        -208
+      ],
+      "webhookId": "441ba313-51b8-4eb4-bc7f-ca6c45bac5f1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const messages = $input.all();\nconst BOT_ID = 'YOUR_DISCORD_BOT_ID';\nconst COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes\nconst MAX_AGE_MS = 2 * 60 * 1000; // Ignorer les messages de plus de 2 minutes\n\nconst workflowStaticData = $getWorkflowStaticData('global');\nconst lastProcessedId = workflowStaticData.lastProcessedId || '0';\nconst lastProcessedTime = workflowStaticData.lastProcessedTime || 0;\n\n// Prendre uniquement le dernier message\nconst message = messages[0];\n\nif (!message || \n    !message.json.content || \n    !message.json.content.startsWith('/rr ') ||\n    message.json.author?.id === BOT_ID) {\n  return [];\n}\n\n// Vérifier l'age du message - ignorer si plus de 2 minutes\nconst messageTime = new Date(message.json.timestamp).getTime();\nconst now = Date.now();\nif (now - messageTime > MAX_AGE_MS) {\n  return [];\n}\n\n// Vérifier si ce message a déjà été traité\nif (message.json.id === lastProcessedId) {\n  return [];\n}\n\n// Vérifier le cooldown de 5 minutes\nif (now - lastProcessedTime < COOLDOWN_MS) {\n  return [];\n}\n\n// Sauvegarder l'ID et le timestamp\nworkflowStaticData.lastProcessedId = message.json.id;\nworkflowStaticData.lastProcessedTime = now;\n\n// Parser le Riot ID\nconst riotId = message.json.content.replace('/rr ', '').trim();\nif (!riotId.includes('#')) return [];\n\nconst [gameName, tagLine] = riotId.split('#');\nreturn [{ json: { gameName, tagLine, apiKey: 'YOUR_RIOT_API_KEY' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2736,
+        -416
+      ],
+      "id": "aa494035-393f-4307-ad1d-743e25b4e894",
+      "name": "Code Filtre & Parse"
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "getAll",
+        "guildId": {
+          "__rl": true,
+          "value": "YOUR_DISCORD_SERVER_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_SERVER_OR_CHANNEL_NAME",
+          "cachedResultUrl": "https://discord.com/channels/YOUR_SERVER/YOUR_CHANNEL"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_DISCORD_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_SERVER_OR_CHANNEL_NAME",
+          "cachedResultUrl": "https://discord.com/channels/YOUR_SERVER/YOUR_CHANNEL"
+        },
+        "limit": 1,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        -2960,
+        -416
+      ],
+      "id": "80da2303-41d5-4702-b6cb-c8393dd05991",
+      "name": "Get many messages",
+      "webhookId": "41745dd4-1567-4578-a731-75f1f9194881",
+      "credentials": {
+        "discordBotApi": {
+          "id": "mjGdLlWGQqVfEt6P",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 25
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -3184,
+        -416
+      ],
+      "id": "f0253a88-96f6-4685-9fff-af00782fe92e",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const ranks = $input.all().map(i => i.json);\nconst solo = ranks.find(r => r.queueType === 'RANKED_SOLO_5x5');\nreturn [{ json: solo || { queueType: 'RANKED_SOLO_5x5', tier: 'UNRANKED' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -432
+      ],
+      "id": "28f3e9d3-cd7c-41e9-9996-6998834480e1",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -880,
+        -240
+      ],
+      "id": "a1a80597-d4c6-4a51-b3dd-8cea945ed9f5",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "model": "mistral-small-latest",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatMistralCloud",
+      "typeVersion": 1,
+      "position": [
+        -480,
+        -32
+      ],
+      "id": "8e74c787-695b-4dc5-9b16-9a59375e11ab",
+      "name": "Mistral Cloud Chat Model",
+      "credentials": {
+        "mistralCloudApi": {
+          "id": "eujc2BjoTstlr4PP",
+          "name": "Mistral Cloud account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Tu es un coach League of Legends expert. Analyse les stats de {{ $('Compute Global Stats').item.json.gameName }} sur ses 20 dernières parties.\n\nRang Solo : {{ $('Compute Global Stats').item.json.soloRank }}\nWinrate : {{ $('Compute Global Stats').item.json.winrate }}%\nKDA moyen : {{ $('Compute Global Stats').item.json.avgKda }}\nCS/min : {{ $('Compute Global Stats').item.json.avgCs }}\nChampions favoris : {{ $('Compute Global Stats').item.json.topChamps }}\nSérie actuelle : {{ $('Compute Global Stats').item.json.streak }}\n5 dernières parties :\n{{ $('Compute Global Stats').item.json.last5 }}\n\nGénère un rapport de coaching motivant en français avec 2 axes d'amélioration concrets. Maximum 300 mots.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -480,
+        -240
+      ],
+      "id": "de1da1ac-df96-4f05-8645-38409caad671",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\", \"message\": \"RiftReport généré pour {{ $('Compute Global Stats').item.json.gameName }}\" }",
+        "options": {}
+      },
+      "id": "bf25ed1a-5300-441a-bb7e-8ff6245d35dc",
+      "name": "Webhook Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        224,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "YOUR_DISCORD_SERVER_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_SERVER_OR_CHANNEL_NAME",
+          "cachedResultUrl": "https://discord.com/channels/YOUR_SERVER/YOUR_CHANNEL"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_DISCORD_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "YOUR_SERVER_OR_CHANNEL_NAME",
+          "cachedResultUrl": "https://discord.com/channels/YOUR_SERVER/YOUR_CHANNEL"
+        },
+        "content": "=🎮 RiftReport — {{ $('Compute Global Stats').item.json.gameName }}#{{ $('Compute Global Stats').item.json.tagLine }}",
+        "options": {},
+        "embeds": {
+          "values": [
+            {
+              "description": "={{ $json.coachingText }}",
+              "author": "={{ $('Compute Global Stats').item.json.gameName }}#{{ $('Compute Global Stats').item.json.tagLine }}",
+              "color": "#C8AA6E",
+              "title": "=Rapport des 20 dernières parties",
+              "thumbnail": "={{ $json.championImageUrl }}"
+            }
+          ]
+        }
+      },
+      "id": "33a8844c-2595-4776-8593-1f07ac3ff487",
+      "name": "Send Discord Embed",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -240
+      ],
+      "webhookId": "e38c826a-f020-4894-ac75-7781f8b4902e",
+      "credentials": {
+        "discordBotApi": {
+          "id": "mjGdLlWGQqVfEt6P",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst coachingText = response.output || response.text || '';\nconst stats = $('Compute Global Stats').item.json;\n\nreturn [{ json: { ...stats, coachingText } }];"
+      },
+      "id": "98f0c82b-48c6-49d7-8e20-096e7614b5ec",
+      "name": "Extract Coaching Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -160,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\n\n// Les parties sont dans la clé \"games\" du premier item qui en contient\nlet games = [];\nlet rankItems = [];\n\nallItems.forEach(i => {\n  if (i.json.games && Array.isArray(i.json.games)) {\n    games = i.json.games;\n  } else if (i.json.queueType !== undefined) {\n    rankItems.push(i.json);\n  } else if (i.json.champion !== undefined) {\n    games.push(i.json);\n  }\n});\n\nif (games.length === 0) {\n  throw new Error(`Aucune partie trouvée. Items reçus: ${allItems.length}`);\n}\n\n// Rang Solo/Duo et Flex\nconst soloRank = rankItems.find(r => r.queueType === 'RANKED_SOLO_5x5') || null;\nconst flexRank = rankItems.find(r => r.queueType === 'RANKED_FLEX_SR') || null;\n\n// Stats globales\nconst wins = games.filter(g => g.win).length;\nconst losses = games.length - wins;\nconst winrate = ((wins / games.length) * 100).toFixed(1);\nconst avgKills = (games.reduce((s, g) => s + g.kills, 0) / games.length).toFixed(1);\nconst avgDeaths = (games.reduce((s, g) => s + g.deaths, 0) / games.length).toFixed(1);\nconst avgAssists = (games.reduce((s, g) => s + g.assists, 0) / games.length).toFixed(1);\nconst avgKda = (games.reduce((s, g) => s + g.kda, 0) / games.length).toFixed(2);\nconst avgCs = (games.reduce((s, g) => s + parseFloat(g.csPerMin), 0) / games.length).toFixed(1);\nconst avgDmg = Math.round(games.reduce((s, g) => s + g.damageDealt, 0) / games.length);\nconst avgVision = (games.reduce((s, g) => s + g.visionScore, 0) / games.length).toFixed(1);\nconst avgKp = (games.reduce((s, g) => s + parseFloat(g.killParticipation), 0) / games.length).toFixed(0);\n\n// Champions les plus joués\nconst champCount = {};\ngames.forEach(g => {\n  champCount[g.champion] = (champCount[g.champion] || 0) + 1;\n});\nconst topChamps = Object.entries(champCount)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 3)\n  .map(([champ, count]) => {\n    const champGames = games.filter(g => g.champion === champ);\n    const champWins = champGames.filter(g => g.win).length;\n    return `${champ} (${count} parties, ${((champWins/count)*100).toFixed(0)}% WR)`;\n  });\n\n// Série actuelle\nlet streak = 0;\nlet streakType = '';\nfor (let i = 0; i < games.length; i++) {\n  if (i === 0) { streakType = games[i].win ? 'W' : 'L'; streak = 1; }\n  else if ((games[i].win && streakType === 'W') || (!games[i].win && streakType === 'L')) { streak++; }\n  else break;\n}\nconst streakStr = `${streak} ${streakType === 'W' ? 'victoire(s)' : 'défaite(s)'} de suite`;\n\n// Dernières 5 parties\nconst last5 = games.slice(0, 5).map(g =>\n  `${g.win ? '✅' : '❌'} ${g.champion} | ${g.kills}/${g.deaths}/${g.assists} | ${g.position}`\n).join('\\n');\n\n\n// Champion le plus joué (pour image dynamique)\nconst topChampName = Object.entries(champCount).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Lux';\n// Nettoyer le nom pour l'URL (ex: \"Aurelion Sol\" -> \"AurelionSol\")\nconst champNameForUrl = topChampName.replace(/[^a-zA-Z0-9]/g, '');\nconst championImageUrl = `https://ddragon.leagueoflegends.com/cdn/img/champion/splash/${champNameForUrl}_0.jpg`;\n\nreturn [{\n  json: {\n    gameName: $('GET PUUID').item.json.gameName,\n    tagLine: $('GET PUUID').item.json.tagLine,\n    soloRank: soloRank ? `${soloRank.tier} ${soloRank.rank} - ${soloRank.leaguePoints} LP` : 'Non classé',\n    soloWins: soloRank?.wins || 0,\n    soloLosses: soloRank?.losses || 0,\n    flexRank: flexRank ? `${flexRank.tier} ${flexRank.rank} - ${flexRank.leaguePoints} LP` : 'Non classé',\n    totalGames: games.length,\n    wins, losses, winrate,\n    avgKills, avgDeaths, avgAssists, avgKda,\n    avgCs, avgDmg, avgVision, avgKp,\n    topChamps,\n    streak: streakStr,\n    last5,\n    hotStreak: soloRank?.hotStreak || false,\n    topChampName,\n    championImageUrl\n  }\n}];"
+      },
+      "id": "bb096bbd-725a-4655-8aa4-a17696c99a06",
+      "name": "Compute Global Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "games",
+        "options": {}
+      },
+      "id": "a48d5b36-7f20-4a80-b752-ae6f5d88dbe4",
+      "name": "Aggregate All Games",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        -1088,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const puuid = $('GET PUUID').item.json.puuid;\nconst match = $input.item.json;\nconst participant = match.info.participants.find(p => p.puuid === puuid);\n\nif (!participant) return {};\n\nconst durationMin = match.info.gameDuration / 60;\n\nreturn {\n  json: {\n    matchId: match.metadata.matchId,\n    champion: participant.championName,\n    position: participant.teamPosition || participant.individualPosition,\n    kills: participant.kills,\n    deaths: participant.deaths,\n    assists: participant.assists,\n    kda: participant.deaths === 0 \n      ? (participant.kills + participant.assists) \n      : ((participant.kills + participant.assists) / participant.deaths),\n    win: participant.win,\n    cs: participant.totalMinionsKilled + participant.neutralMinionsKilled,\n    csPerMin: ((participant.totalMinionsKilled + participant.neutralMinionsKilled) / durationMin).toFixed(1),\n    damageDealt: participant.totalDamageDealtToChampions,\n    visionScore: participant.visionScore,\n    killParticipation: (participant.challenges?.killParticipation * 100 || 0).toFixed(0),\n    goldEarned: participant.goldEarned,\n    durationMin: durationMin.toFixed(0),\n    gameDate: new Date(match.info.gameEndTimestamp).toLocaleDateString('fr-FR')\n  }\n};"
+      },
+      "id": "5143369a-b405-40c1-909e-a6360eaa2a86",
+      "name": "Extract Player Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://europe.api.riotgames.com/lol/match/v5/matches/{{ $json.matchId }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Riot-Token",
+              "value": "YOUR_RIOT_API_KEY"
+            }
+          ]
+        },
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 1200
+            }
+          }
+        }
+      },
+      "id": "91cd5231-b328-482c-9eaa-613169163431",
+      "name": "GET Match Detail",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1488,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\nconst puuid = $('GET PUUID').item.json.puuid;\n\n// Chaque item est un match ID dont les caractères sont splittés en clés\nreturn allItems.map(item => {\n  const chars = Object.values(item.json);\n  const matchId = chars.join('');\n  return { json: { matchId, puuid } };\n});"
+      },
+      "id": "3c9793f5-39ef-4bd7-bb54-8542de32df9c",
+      "name": "Split Match IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1696,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://europe.api.riotgames.com/lol/match/v5/matches/by-puuid/{{ $('GET PUUID').item.json.puuid }}/ids?start=0&count=10",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Riot-Token",
+              "value": "YOUR_RIOT_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "47172022-3103-46f8-be03-f6cd2c022152",
+      "name": "GET Match IDs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1888,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://euw1.api.riotgames.com/lol/league/v4/entries/by-puuid/{{ $json.puuid }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Riot-Token",
+              "value": "YOUR_RIOT_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2df352a7-d79d-4c55-b97a-d6f7400f41d7",
+      "name": "GET Rank",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -1776,
+        -432
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://europe.api.riotgames.com/riot/account/v1/accounts/by-riot-id/{{ $json.gameName }}/{{ $json.tagLine }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Riot-Token",
+              "value": "YOUR_RIOT_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "61741c54-61d0-462c-9864-f22f5b859f38",
+      "name": "GET PUUID",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -2144,
+        -336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraire pseudo et tag depuis le body\nconst body = $input.first().json.body || $input.first().json;\n\nlet gameName, tagLine;\n\n// Support format \"ColoMiel#TDS\" ou gameName + tagLine séparés\nif (body.riotId && body.riotId.includes('#')) {\n  [gameName, tagLine] = body.riotId.split('#');\n} else if (body.gameName && body.gameName.includes('#')) {\n  [gameName, tagLine] = body.gameName.split('#');\n} else {\n  gameName = body.gameName || 'ColoMiel';\n  tagLine = body.tagLine || 'TDS';\n}\n\nconst apiKey = body.apiKey || 'YOUR_RIOT_API_KEY';\nreturn [{ json: { gameName, tagLine, apiKey } }];"
+      },
+      "id": "21a96057-a2a2-4cd9-b811-a4119c92af03",
+      "name": "Parse Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2368,
+        -336
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Code Filtre & Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - /rr": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Filtre & Parse": {
+      "main": [
+        [
+          {
+            "node": "Parse Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Compute Global Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mistral Cloud Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Extract Coaching Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Discord Embed": {
+      "main": [
+        [
+          {
+            "node": "Webhook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Coaching Text": {
+      "main": [
+        [
+          {
+            "node": "Send Discord Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Global Stats": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate All Games": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Extract Player Stats": {
+      "main": [
+        [
+          {
+            "node": "Aggregate All Games",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Match Detail": {
+      "main": [
+        [
+          {
+            "node": "Extract Player Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Match IDs": {
+      "main": [
+        [
+          {
+            "node": "GET Match Detail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Match IDs": {
+      "main": [
+        [
+          {
+            "node": "Split Match IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Rank": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET PUUID": {
+      "main": [
+        [
+          {
+            "node": "GET Match IDs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "GET Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Input": {
+      "main": [
+        [
+          {
+            "node": "GET PUUID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "nodeGroups": [],
+  "id": "sFCIbvmpdFIuvOoK",
+  "tags": []
+}
